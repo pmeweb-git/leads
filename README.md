@@ -40,7 +40,8 @@ return r.ok ? json({ ok: true }, 200) : json({ ok: false, error: 'unavailable' }
 take it AND the fallback email failed: the route answers 502 so the visitor knows to call).
 
 Every value is clamped to what `LeadsApi` accepts (a name of 120 characters, one line; an email of
-200 that looks like one, else `null`; a phone of 40; a message of 5 000; a page that is a path of
+at most 200 that looks like one, else `null` with what the visitor typed kept as the first
+field, « Courriel (non valide) » / « Email (invalid) », never truncated; a phone of 40; a message of 5 000; a page that is a path of
 300; at most 20 fields, labels of 80, values of 2 000). A value the portal would refuse is cut or
 dropped rather than losing the request. A form with neither a valid email nor a phone is still
 refused by the portal; it then goes out by the fallback.

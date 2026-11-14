@@ -66,6 +66,38 @@ describe('submitLead', () => {
     expect(sent.formAction).toBeNull();
     expect(sent.fields).toHaveLength(20);
   });
+  it('an invalid email is kept as a field, for the portal and the fallback', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const e = env({ ok: false, error: 'bad_args' });
+    expect(await submitLead(e.env, { ...input, email: ' jo@exemple\n', phone: '' })).toEqual({ ok: true, via: 'fallback' });
+    expect(e.calls[0].email).toBeNull();
+    expect(e.calls[0].fields[0]).toEqual({ label: 'Courriel (non valide)', value: 'jo@exemple' });
+    expect(e.sent[0].text).toContain('jo@exemple');
+    expect(e.sent[0].replyTo).toBeUndefined();
+    const en = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    await submitLead(en.env, { ...input, lang: 'en', email: 'nope' });
+    expect(en.calls[0].fields[0]).toEqual({ label: 'Email (invalid)', value: 'nope' });
+  });
+  it('an email over 200 characters is dropped whole and kept as a field, never truncated', async () => {
+    const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    const long = `${'a'.repeat(195)}@exemple.ca`;
+    await submitLead(e.env, { ...input, email: long });
+    expect(e.calls[0].email).toBeNull();
+    expect(e.calls[0].fields[0]).toEqual({ label: 'Courriel (non valide)', value: long });
+  });
+  it('the invalid-email field counts within the 20-field cap', async () => {
+    const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    await submitLead(e.env, { ...input, email: 'x', fields: Array.from({ length: 30 }, (_, i) => ({ label: `L${i}`, value: 'v' })) });
+    expect(e.calls[0].fields).toHaveLength(20);
+    expect(e.calls[0].fields[0].label).toBe('Courriel (non valide)');
+  });
+  it('a synchronous or throwing custom fallback does not break submitLead', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await submitLead({}, input, { fallback: () => true })).toEqual({ ok: true, via: 'fallback' });
+    expect(await submitLead({}, input, { fallback: () => { throw new TypeError('jo@exemple.ca'); } })).toEqual({ ok: false });
+    expect(err.mock.calls.some((c) => c[0] === '[leads] custom fallback failed' && c[1] === 'TypeError')).toBe(true);
+    expect(err.mock.calls.flat().join(' ')).not.toContain('jo@');
+  });
   it('logs the error name only, never the visitor', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     await submitLead(env(new TypeError('jo@exemple.ca')).env, input);

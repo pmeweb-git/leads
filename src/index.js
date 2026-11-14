@@ -18,18 +18,26 @@ const cut = (s, n) => (s.length > n ? s.slice(0, n) : s);
 const ACTION_RE = /^[a-z0-9-]{1,40}$/;
 
 function clean(i) {
-  const email = cut(oneLine(i.email), 200);
+  const lang = i.lang === 'en' ? 'en' : 'fr';
+  // An email over 200 characters or that does not look like one is never truncated into a valid
+  // shape: it is dropped from `email` and kept, as typed, as the first field, so the portal and the
+  // fallback email still carry the contact the visitor gave.
+  const rawEmail = oneLine(i.email);
+  const email = rawEmail.length <= 200 && EMAIL_RE.test(rawEmail) ? rawEmail : null;
+  const badEmail = rawEmail && !email
+    ? [{ label: lang === 'en' ? 'Email (invalid)' : 'Courriel (non valide)', value: cut(rawEmail, 2000) }]
+    : [];
   const page = typeof i.page === 'string' && i.page.startsWith('/') ? cut(i.page, 300) : null;
   return {
     rpc: LEADS_RPC, host: i.host, source: 'form',
-    formAction: typeof i.formAction === 'string' && ACTION_RE.test(i.formAction) ? i.formAction : null, page, lang: i.lang === 'en' ? 'en' : 'fr',
+    formAction: typeof i.formAction === 'string' && ACTION_RE.test(i.formAction) ? i.formAction : null, page, lang,
     name: cut(oneLine(i.name), 120) || '?',
-    email: EMAIL_RE.test(email) ? email : null,
+    email,
     phone: cut(oneLine(i.phone), 40) || null,
     message: i.message ? cut(String(i.message).trim(), 5000) : null,
-    fields: (Array.isArray(i.fields) ? i.fields : [])
+    fields: [...badEmail, ...(Array.isArray(i.fields) ? i.fields : [])
       .map((f) => ({ label: cut(oneLine(f?.label), 80), value: cut(String(f?.value ?? '').trim(), 2000) }))
-      .filter((f) => f.label && f.value).slice(0, 20),
+      .filter((f) => f.label && f.value)].slice(0, 20),
     spam: i.spam === true,
   };
 }
@@ -85,7 +93,12 @@ export async function submitLead(env, input, options = {}) {
   if (answer && answer.ok === true && answer.delivered === true) return { ok: true, via: 'portal' };
   if (answer && answer.ok === false) console.error('[leads] LeadsApi refused', answer.error);
   const mail = fallbackMail(input, v, answer && answer.ok === true ? answer.delivered : undefined);
-  const sent = options.fallback ? await options.fallback(mail).catch(() => false) : await emailSending(env, mail);
+  const sent = options.fallback
+    ? await Promise.resolve().then(() => options.fallback(mail)).catch((e) => {
+      console.error('[leads] custom fallback failed', e instanceof Error ? e.name : 'unknown');
+      return false;
+    })
+    : await emailSending(env, mail);
   return sent ? { ok: true, via: 'fallback' } : { ok: false };
 }
 

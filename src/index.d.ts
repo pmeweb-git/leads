@@ -10,13 +10,14 @@ export interface LeadsEnv {
 export interface LeadInput {
   /** `new URL(request.url).host`: the host the visitor used. */
   host: string;
-  /** The form's Turnstile action. */
+  /** The form's Turnstile action. One that is not `^[a-z0-9-]{1,40}$` is sent as `null`. */
   formAction: string;
   page?: string | null;
   lang: 'fr' | 'en';
   /** The site's name, for the fallback email's From name (« Site <siteName> »). */
   siteName: string;
   name: string;
+  /** One that is over 200 characters or not an address is sent as `null` and kept, as typed, as the first field (« Courriel (non valide) » / « Email (invalid) »). */
   email?: string | null;
   phone?: string | null;
   message?: string | null;
