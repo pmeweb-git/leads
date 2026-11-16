@@ -7,6 +7,17 @@ export interface LeadsEnv {
   CONTACT_TO?: string;
   CONTACT_FROM?: string;
 }
+export interface LeadField {
+  /**
+   * The field's stable name, the same in every language of the form (`^[a-z][a-z0-9_]{0,39}$`), from the
+   * README's « Field keys » vocabulary when one fits. Never `name`, `email`, `phone`, `message`,
+   * `email_invalid` or `phone_invalid`. A malformed, reserved or repeated key is dropped (the field is kept).
+   */
+  key?: string;
+  /** What the form shows, in the page's language. */
+  label: string;
+  value: string;
+}
 export interface LeadInput {
   /** `new URL(request.url).host`: the host the visitor used. */
   host: string;
@@ -21,8 +32,8 @@ export interface LeadInput {
   email?: string | null;
   phone?: string | null;
   message?: string | null;
-  /** Every other field, labelled as the form shows it. */
-  fields?: { label: string; value: string }[];
+  /** Every other field, labelled as the form shows it, keyed by its stable name. */
+  fields?: LeadField[];
   /** The site's own filter judged it spam: stored in « Indésirables », never emailed. */
   spam?: boolean;
 }

@@ -1,13 +1,29 @@
 {
   "name": "@pmeweb/leads",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "PmeWeb sites' one way to hand a request form's submission to the portal's leads foundation (LeadsApi), with an email fallback when the portal does not take it.",
   "type": "module",
   "license": "MIT",
-  "publishConfig": { "access": "public" },
-  "files": ["src"],
-  "exports": { ".": { "types": "./src/index.d.ts", "default": "./src/index.js" } },
-  "scripts": { "test": "vitest run", "prepublishOnly": "vitest run" },
-  "devDependencies": { "vitest": "4.1.11" },
-  "engines": { "node": ">=22.12" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "prepublishOnly": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
 }

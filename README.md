@@ -30,7 +30,7 @@ const r = await submitLead(env, {
   lang: 'fr',
   siteName: 'Atelier Boisclair',    // the fallback email's From name: « Site <siteName> »
   name, email, phone, message,
-  fields: [{ label: 'Ville', value: ville }], // every other field, labelled as the form shows it
+  fields: [{ key: 'city', label: 'Ville', value: ville }], // every other field: its key, its label as shown
   spam: false,                      // true when the site's own filter judged it spam
 });
 return r.ok ? json({ ok: true }, 200) : json({ ok: false, error: 'unavailable' }, 502);
@@ -45,6 +45,45 @@ field, « Courriel (non valide) » / « Email (invalid) », never truncated; a p
 300; at most 20 fields, labels of 80, values of 2 000). A value the portal would refuse is cut or
 dropped rather than losing the request. A form with neither a valid email nor a phone is still
 refused by the portal; it then goes out by the fallback.
+
+## Field keys
+
+Every field carries a `key`: its stable name, the SAME in every language and wording of the form, so the
+portal can count and compare it (« Entreprise » on `/contact/` and « Company » on `/en/contact/` are both
+`company`). Write it in the one object that builds the field, beside the label:
+
+```js
+fields: [
+  { key: 'company', label: lang === 'en' ? 'Company' : 'Entreprise', value: company },
+  { key: 'service', label: lang === 'en' ? 'Type of work' : 'Type de travaux', value: work },
+],
+```
+
+- `^[a-z][a-z0-9_]{0,39}$`; never derived from the label; one key per thing the form asks, and the same key
+  on every form of the site that asks it.
+- Use the vocabulary's key when one fits; a site adds its own otherwise (snake_case English, named after
+  what is asked, not how).
+- A key names the FIELD. The value stays what the visitor typed or picked, in the page's language.
+- Reserved, never a site's: `name`, `email`, `phone`, `message` (the lead's own columns), `email_invalid`,
+  `phone_invalid` (the package and the portal key the « Courriel (non valide) » / « Téléphone (non valide) »
+  fields themselves).
+- A malformed, reserved or repeated key is dropped and the field kept (`[leads] field key dropped` in the
+  log). The site's handler test asserts the keys.
+
+| Key | The field | Labels seen |
+|---|---|---|
+| `company` | the visitor's company or organisation | Entreprise / Company |
+| `role` | the visitor's job title | Fonction / Role |
+| `subject` | the topic picked for the message | Sujet, Type de demande / Subject |
+| `service` | which of the business's services, kind of work or project is asked for | Type de travaux, Type de projet / Type of work |
+| `city` | the visitor's or the job's city | Ville / City |
+| `address` | a street address | Adresse / Address |
+| `budget` | the budget the visitor gives | Budget |
+| `timeline` | when the work should happen | Échéancier, Délai / Timeline |
+| `preferred_date` | a date or time the visitor asks for | Date souhaitée / Preferred date |
+| `how_heard` | how the visitor heard of the business | Comment nous avez-vous connus / How did you hear about us |
+
+A key is additive: a portal that predates it ignores it, and `rpc` stays 1.
 
 **Never send a newsletter signup through it.** It is for requests a person answers.
 
@@ -97,3 +136,9 @@ setting the client changes in the portal.
 Every call carries `rpc: 1` (`LEADS_RPC`). The versions the portal accepts are in its
 `plugin-rpc.json` under `leads`. Run `node scripts/plugin-status.mjs` from the workspace before
 changing anything this package sends or reads.
+
+## Versions
+
+- **1.1.0**: a field may carry a `key` (« Field keys »); the invalid-email field is keyed `email_invalid`.
+  Additive, `rpc` 1.
+- **1.0.0**: `submitLead`, `leadsHealth`, the fallback email.
