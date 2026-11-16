@@ -17,6 +17,42 @@ function env(answer, o = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('submitLead', () => {
+  it('a field key travels with its field; the fallback email shows the label only', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const e = env({ ok: true, id: 'l', delivered: false, fallback: [] });
+    await submitLead(e.env, { ...input, fields: [{ key: 'city', label: 'Ville', value: 'Laval' }] });
+    expect(e.calls[0].fields).toEqual([{ key: 'city', label: 'Ville', value: 'Laval' }]);
+    expect(e.sent[0].text).toContain('Ville');
+    expect(e.sent[0].text).not.toContain('city');
+  });
+  it('a field without a key is sent without one', async () => {
+    const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    await submitLead(e.env, input);
+    expect(e.calls[0].fields[0]).not.toHaveProperty('key');
+  });
+  it('a malformed, reserved or repeated key is dropped, the field kept, and named in the log (never a value)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    const fields = [
+      { key: 'Ville', label: 'A', value: 'Laval' }, { key: 42, label: 'B', value: 'b' }, { key: 'x'.repeat(41), label: 'C', value: 'c' },
+      { key: 'email', label: 'D', value: 'd' }, { key: 'email_invalid', label: 'E', value: 'e' },
+      { key: 'city', label: 'F', value: 'f' }, { key: 'city', label: 'G', value: 'g' },
+    ];
+    await submitLead(e.env, { ...input, fields });
+    expect(e.calls[0].fields).toEqual([
+      { label: 'A', value: 'Laval' }, { label: 'B', value: 'b' }, { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' }, { label: 'E', value: 'e' },
+      { key: 'city', label: 'F', value: 'f' }, { label: 'G', value: 'g' },
+    ]);
+    const dropped = err.mock.calls.filter((c) => c[0] === '[leads] field key dropped').map((c) => c[1]);
+    expect(dropped).toEqual(['malformed', 'malformed', 'malformed', 'email', 'email_invalid', 'city']);
+    expect(err.mock.calls.flat().join(' ')).not.toContain('Laval');
+  });
+  it('an empty field does not take its key', async () => {
+    const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
+    await submitLead(e.env, { ...input, fields: [{ key: 'company', label: 'Entreprise', value: '  ' }, { key: 'company', label: 'Company', value: 'Acme' }] });
+    expect(e.calls[0].fields).toEqual([{ key: 'company', label: 'Company', value: 'Acme' }]);
+  });
   it('the portal took it: no email', async () => {
     const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
     expect(await submitLead(e.env, input)).toEqual({ ok: true, via: 'portal' });
@@ -71,19 +107,19 @@ describe('submitLead', () => {
     const e = env({ ok: false, error: 'bad_args' });
     expect(await submitLead(e.env, { ...input, email: ' jo@exemple\n', phone: '' })).toEqual({ ok: true, via: 'fallback' });
     expect(e.calls[0].email).toBeNull();
-    expect(e.calls[0].fields[0]).toEqual({ label: 'Courriel (non valide)', value: 'jo@exemple' });
+    expect(e.calls[0].fields[0]).toEqual({ key: 'email_invalid', label: 'Courriel (non valide)', value: 'jo@exemple' });
     expect(e.sent[0].text).toContain('jo@exemple');
     expect(e.sent[0].replyTo).toBeUndefined();
     const en = env({ ok: true, id: 'l', delivered: true, fallback: [] });
     await submitLead(en.env, { ...input, lang: 'en', email: 'nope' });
-    expect(en.calls[0].fields[0]).toEqual({ label: 'Email (invalid)', value: 'nope' });
+    expect(en.calls[0].fields[0]).toEqual({ key: 'email_invalid', label: 'Email (invalid)', value: 'nope' });
   });
   it('an email over 200 characters is dropped whole and kept as a field, never truncated', async () => {
     const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });
     const long = `${'a'.repeat(195)}@exemple.ca`;
     await submitLead(e.env, { ...input, email: long });
     expect(e.calls[0].email).toBeNull();
-    expect(e.calls[0].fields[0]).toEqual({ label: 'Courriel (non valide)', value: long });
+    expect(e.calls[0].fields[0]).toEqual({ key: 'email_invalid', label: 'Courriel (non valide)', value: long });
   });
   it('the invalid-email field counts within the 20-field cap', async () => {
     const e = env({ ok: true, id: 'l', delivered: true, fallback: [] });

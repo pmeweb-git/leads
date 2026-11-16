@@ -16,6 +16,26 @@ const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
 const oneLine = (s) => String(s ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 const cut = (s, n) => (s.length > n ? s.slice(0, n) : s);
 const ACTION_RE = /^[a-z0-9-]{1,40}$/;
+// A field's stable name (README « Field keys »): the same in every language of the form. Reserved: the
+// lead's columns, and the invalid-contact keys this package and the portal give themselves.
+const FIELD_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
+const RESERVED_KEYS = new Set(['name', 'email', 'phone', 'message', 'email_invalid', 'phone_invalid']);
+
+/** A malformed, reserved or repeated key is dropped and its field kept: a lead is never lost to its
+ *  metadata. The log names the key (the site's code), never a value. */
+function keyed(fields) {
+  const seen = new Set();
+  return fields.map(({ key, label, value }) => {
+    if (key === undefined || key === null) return { label, value };
+    const shaped = typeof key === 'string' && FIELD_KEY_RE.test(key);
+    if (!shaped || RESERVED_KEYS.has(key) || seen.has(key)) {
+      console.error('[leads] field key dropped', shaped ? key : 'malformed');
+      return { label, value };
+    }
+    seen.add(key);
+    return { key, label, value };
+  });
+}
 
 function clean(i) {
   const lang = i.lang === 'en' ? 'en' : 'fr';
@@ -25,7 +45,7 @@ function clean(i) {
   const rawEmail = oneLine(i.email);
   const email = rawEmail.length <= 200 && EMAIL_RE.test(rawEmail) ? rawEmail : null;
   const badEmail = rawEmail && !email
-    ? [{ label: lang === 'en' ? 'Email (invalid)' : 'Courriel (non valide)', value: cut(rawEmail, 2000) }]
+    ? [{ key: 'email_invalid', label: lang === 'en' ? 'Email (invalid)' : 'Courriel (non valide)', value: cut(rawEmail, 2000) }]
     : [];
   const page = typeof i.page === 'string' && i.page.startsWith('/') ? cut(i.page, 300) : null;
   return {
@@ -35,9 +55,9 @@ function clean(i) {
     email,
     phone: cut(oneLine(i.phone), 40) || null,
     message: i.message ? cut(String(i.message).trim(), 5000) : null,
-    fields: [...badEmail, ...(Array.isArray(i.fields) ? i.fields : [])
-      .map((f) => ({ label: cut(oneLine(f?.label), 80), value: cut(String(f?.value ?? '').trim(), 2000) }))
-      .filter((f) => f.label && f.value)].slice(0, 20),
+    fields: [...badEmail, ...keyed((Array.isArray(i.fields) ? i.fields : [])
+      .map((f) => ({ key: f?.key, label: cut(oneLine(f?.label), 80), value: cut(String(f?.value ?? '').trim(), 2000) }))
+      .filter((f) => f.label && f.value))].slice(0, 20),
     spam: i.spam === true,
   };
 }
